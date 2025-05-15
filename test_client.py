@@ -1,16 +1,19 @@
 import requests
 import numpy as np
 
-# Load a sample EEG data segment (same shape as model expects)
-X = np.load('X.npy', allow_pickle=True)  # shape: (num_samples, channels, time)
+# Load EEG sample data
+eeg_data = np.load("X.npy", allow_pickle=True)[7]  # Update index if needed
 
-# Pick one sample
-sample_eeg = X[7]  # shape: (channels, time)
+# Send request to backend
+response = requests.post(
+    "http://127.0.0.1:5000/predict",
+    json={"eeg_data": eeg_data.tolist()}
+)
 
-# Convert to list for JSON serialization
-payload = {"eeg_data": sample_eeg.tolist()}
-
-# Send POST request to your local Flask backend
-response = requests.post("http://127.0.0.1:5000/predict", json=payload)
-
-print("Response:", response.json())
+# Handle response
+if response.status_code == 200:
+    result = response.json()
+    print("Prediction:", result["prediction"])
+    print("Plot URL:", f"http://127.0.0.1:5000{result['plot_url']}")
+else:
+    print("Error:", response.text)
