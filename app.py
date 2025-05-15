@@ -3,6 +3,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+import matplotlib.pyplot as plt
+import os
+import uuid
 class EEGClassifier(nn.Module):
     def __init__(self, input_channels, input_time):
         super().__init__()
@@ -40,23 +43,41 @@ model.load_state_dict(torch.load('eeg_model.pth', map_location=device))
 model.eval()
 app = Flask(__name__)
 
+os.makedirs("static", exist_ok=True)
+
 @app.route('/predict', methods=['POST'])
 def predict():
     try:
         data = request.get_json()
-        if 'eeg_data' not in data:
-            return jsonify({'error': 'Missing eeg_data'}), 400
-
-        eeg_array = np.array(data['eeg_data'], dtype=np.float32)  # shape: (channels, time)
-        eeg_tensor = torch.from_numpy(eeg_array).unsqueeze(0).to(device)  # shape: (1, C, T)
+        eeg_data = np.array(data['eeg_data'], dtype=np.float32)
+        eeg_tensor = torch.from_numpy(eeg_data).unsqueeze(0)
 
         with torch.no_grad():
             output = model(eeg_tensor)
-            pred = torch.argmax(output, dim=1).item()
+            prediction = torch.argmax(output, dim=1).item()
 
-        return jsonify({'prediction': 'left' if pred == 0 else 'right'})
+        pred_label = "left" if prediction == 0 else "right"
+
+        # Create EEG plot
+        filename = f"{uuid.uuid4().hex}.png"
+        filepath = os.path.join("static", filename)
+
+        plt.figure(figsize=(10, 4))
+        for ch in eeg_data:
+            plt.plot(ch)
+        plt.title(f"EEG Signal (Prediction: {pred_label})")
+        plt.xlabel("Time")
+        plt.ylabel("Amplitude")
+        plt.tight_layout()
+        plt.savefig(filepath)
+        plt.close()
+
+        return jsonify({
+            "prediction": pred_label,
+            "plot_url": f"/static/{filename}"
+        })
+
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
+        return jsonify({"error": str(e)}), 500
 if __name__ == '__main__':
     app.run(debug=True)
